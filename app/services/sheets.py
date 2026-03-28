@@ -110,7 +110,7 @@ def fetch_issues() -> list[Issue]:
                     issue_type=issue_type,
                     description=description,
                     cluster_key=cluster_key,
-                    status="Not Resolved",
+                    status="NOT RESOLVED",
                 )
             )
             if debug_rows_logged < 3:

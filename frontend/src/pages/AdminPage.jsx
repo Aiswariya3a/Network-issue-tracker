@@ -2,10 +2,29 @@ import { useEffect, useMemo, useState } from "react";
 import AdminIssuesTable from "../components/AdminIssuesTable";
 import ErrorMessage from "../components/ErrorMessage";
 import FilterBar from "../components/FilterBar";
+import FooterNote from "../components/FooterNote";
 import Header from "../components/Header";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Toast from "../components/Toast";
-import { fetchIssues, updateIssueStatus } from "../services/api";
+import { exportAdminReport, fetchIssues, updateIssueStatus } from "../services/api";
+
+function toInputDate(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDateWindow() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const min = new Date(today);
+  min.setDate(today.getDate() - 29);
+  return {
+    today: toInputDate(today),
+    minDate: toInputDate(min)
+  };
+}
 
 function AdminPage() {
   const [issues, setIssues] = useState([]);
@@ -14,14 +33,23 @@ function AdminPage() {
   const [filters, setFilters] = useState({ floor: "", issueType: "", status: "" });
   const [selectedStatusMap, setSelectedStatusMap] = useState({});
   const [resolutionNoteMap, setResolutionNoteMap] = useState({});
+  const [ictNameMap, setIctNameMap] = useState({});
   const [pendingMap, setPendingMap] = useState({});
   const [toast, setToast] = useState({ message: "", type: "success" });
+  const [showExportPanel, setShowExportPanel] = useState(false);
+  const dateWindow = useMemo(() => getDateWindow(), []);
+  const [exportFromDate, setExportFromDate] = useState(dateWindow.today);
+  const [exportToDate, setExportToDate] = useState(dateWindow.today);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const loadIssues = async () => {
     try {
       setError("");
       const data = await fetchIssues();
       setIssues(data);
+      setSelectedStatusMap({});
+      setResolutionNoteMap({});
+      setIctNameMap({});
     } catch (err) {
       const message = err?.response?.data?.detail || "Failed to load issues.";
       setError(message);
@@ -47,7 +75,7 @@ function AdminPage() {
     () => ({
       floors: Array.from(new Set(issues.map((item) => item.floor).filter(Boolean))).sort(),
       issueTypes: Array.from(new Set(issues.map((item) => item.issue_type).filter(Boolean))).sort(),
-      statuses: ["Resolved", "Not Resolved"]
+      statuses: ["NOT RESOLVED", "ACKNOWLEDGED", "RESOLVED"]
     }),
     [issues]
   );
@@ -59,27 +87,63 @@ function AdminPage() {
 
   const handleStatusChange = (rowIndex, value) => {
     setSelectedStatusMap((prev) => ({ ...prev, [rowIndex]: value }));
-    if (value !== "Resolved") {
-      setResolutionNoteMap((prev) => ({ ...prev, [rowIndex]: "" }));
-    }
   };
 
   const handleResolutionNoteChange = (rowIndex, value) => {
     setResolutionNoteMap((prev) => ({ ...prev, [rowIndex]: value }));
   };
 
+  const handleIctNameChange = (rowIndex, value) => {
+    setIctNameMap((prev) => ({ ...prev, [rowIndex]: value }));
+  };
+
   const handleUpdate = async (rowIndex) => {
     const issue = issues.find((item) => item.row_index === rowIndex);
     if (!issue) return;
+
     const statusToSend = selectedStatusMap[rowIndex] || issue.status;
-    const resolutionNote = resolutionNoteMap[rowIndex] || "";
+    const resolutionRemark = resolutionNoteMap[rowIndex] ?? issue.resolution_remark ?? "";
+    const ictMemberName = (ictNameMap[rowIndex] ?? issue.ict_member_name ?? "").trim();
+
+    if (!ictMemberName) {
+      showToast("ICT member name is required.", "error");
+      return;
+    }
+    if (statusToSend === "ACKNOWLEDGED" && !resolutionRemark.trim()) {
+      showToast("Resolution note is mandatory for ACKNOWLEDGED.", "error");
+      return;
+    }
 
     setPendingMap((prev) => ({ ...prev, [rowIndex]: true }));
     try {
-      await updateIssueStatus(rowIndex, statusToSend, resolutionNote);
-      setIssues((prev) =>
-        prev.map((item) => (item.row_index === rowIndex ? { ...item, status: statusToSend } : item))
-      );
+      await updateIssueStatus(rowIndex, {
+        status: statusToSend,
+        ictMemberName,
+        resolutionRemark
+      });
+      setIssues((prev) => {
+        const updated = prev.map((item) =>
+          item.row_index === rowIndex
+            ? {
+                ...item,
+                status: statusToSend,
+                ict_member_name: ictMemberName,
+                resolution_remark: resolutionRemark
+              }
+            : item
+        );
+
+        if (!["ACKNOWLEDGED", "RESOLVED"].includes(statusToSend)) {
+          return updated;
+        }
+
+        const idx = updated.findIndex((item) => item.row_index === rowIndex);
+        if (idx < 0) {
+          return updated;
+        }
+        const moved = updated[idx];
+        return [...updated.slice(0, idx), ...updated.slice(idx + 1), moved];
+      });
       showToast("Status updated successfully.", "success");
     } catch (err) {
       if (err?.response?.status === 401) {
@@ -93,20 +157,115 @@ function AdminPage() {
     }
   };
 
+  const handleExport = async () => {
+    if (!exportFromDate || !exportToDate) {
+      showToast("Please select both from and to dates.", "error");
+      return;
+    }
+    if (exportFromDate > exportToDate) {
+      showToast("From date must be on or before To date.", "error");
+      return;
+    }
+    if (exportFromDate < dateWindow.minDate || exportToDate < dateWindow.minDate) {
+      showToast("Only last 30 days can be exported.", "error");
+      return;
+    }
+    if (exportFromDate > dateWindow.today || exportToDate > dateWindow.today) {
+      showToast("Future dates are not allowed.", "error");
+      return;
+    }
+
+    setExportLoading(true);
+    try {
+      const { blob, filename } = await exportAdminReport(exportFromDate, exportToDate);
+      const fileUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = fileUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(fileUrl);
+      showToast("Report downloaded.", "success");
+      setShowExportPanel(false);
+    } catch (err) {
+      const message = err?.response?.data?.detail || "Failed to download report.";
+      showToast(message, "error");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-bgLight">
       <Header />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-primaryDark">Admin Panel</h2>
-          <button
-            type="button"
-            onClick={loadIssues}
-            className="rounded-lg border border-primary px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
-          >
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowExportPanel((prev) => !prev)}
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primaryDark"
+            >
+              Download Resolved Issues
+            </button>
+            <button
+              type="button"
+              onClick={loadIssues}
+              className="rounded-lg border border-primary px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
+
+        {showExportPanel ? (
+          <section className="rounded-xl2 border border-cardBorder bg-white p-4 shadow-soft">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm text-slate-700">
+                <span className="font-medium">From</span>
+                <input
+                  type="date"
+                  value={exportFromDate}
+                  min={dateWindow.minDate}
+                  max={dateWindow.today}
+                  onChange={(e) => setExportFromDate(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-slate-700">
+                <span className="font-medium">To</span>
+                <input
+                  type="date"
+                  value={exportToDate}
+                  min={dateWindow.minDate}
+                  max={dateWindow.today}
+                  onChange={(e) => setExportToDate(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={exportLoading}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primaryDark disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {exportLoading ? "Preparing..." : "Download"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowExportPanel(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Only the last 30 days are allowed. Single-day export is supported.</p>
+          </section>
+        ) : null}
 
         <FilterBar
           filters={filters}
@@ -123,12 +282,15 @@ function AdminPage() {
             pendingMap={pendingMap}
             selectedStatusMap={selectedStatusMap}
             resolutionNoteMap={resolutionNoteMap}
+            ictNameMap={ictNameMap}
             onStatusChange={handleStatusChange}
             onResolutionNoteChange={handleResolutionNoteChange}
+            onIctNameChange={handleIctNameChange}
             onUpdate={handleUpdate}
           />
         ) : null}
       </main>
+      <FooterNote />
       <Toast message={toast.message} type={toast.type} />
     </div>
   );

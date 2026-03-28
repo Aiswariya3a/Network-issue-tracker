@@ -2,12 +2,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    database_url: str
     google_sheet_csv_url: str = ""
-    google_service_account_file: str = ""
-    google_sheet_id: str = ""
-    google_worksheet_name: str = "Form Responses 1"
-    google_status_column_name: str = "Status"
-    sqlite_db_path: str = "issues.db"
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expiry_hours: int = 8
@@ -22,6 +18,10 @@ class Settings(BaseSettings):
     report_test_interval_minutes: int = 0
     attach_raw_csv_report: bool = False
     frontend_origin: str = "http://localhost:5173"
+    retention_days: int = 30
+    retention_cleanup_hour: int = 1
+    retention_cleanup_minute: int = 30
+    archive_before_delete: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

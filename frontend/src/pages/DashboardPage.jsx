@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardCharts from "../components/DashboardCharts";
 import ErrorMessage from "../components/ErrorMessage";
+import FooterNote from "../components/FooterNote";
 import Header from "../components/Header";
 import IssuesTable from "../components/IssuesTable";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -11,7 +12,7 @@ function DashboardPage() {
   const [issues, setIssues] = useState([]);
   const [dashboard, setDashboard] = useState({
     issue_types: {},
-    status_summary: { Resolved: 0, "Not Resolved": 0 },
+    status_summary: { RESOLVED: 0, ACKNOWLEDGED: 0, "NOT RESOLVED": 0 },
     location_stats: {},
     clusters: []
   });
@@ -22,8 +23,6 @@ function DashboardPage() {
     try {
       setError("");
       const [issuesData, dashboardData] = await Promise.all([fetchIssues(), fetchDashboard()]);
-      console.log("GET /issues response:", issuesData);
-      console.log("GET /dashboard response:", dashboardData);
       setIssues(issuesData);
       setDashboard(dashboardData);
     } catch (err) {
@@ -42,14 +41,29 @@ function DashboardPage() {
   }, []);
 
   const summary = useMemo(() => {
-    const resolved = dashboard.status_summary?.Resolved || 0;
-    const notResolved = dashboard.status_summary?.["Not Resolved"] || 0;
+    const resolved = dashboard.status_summary?.RESOLVED || 0;
+    const acknowledged = dashboard.status_summary?.ACKNOWLEDGED || 0;
+    const notResolved = dashboard.status_summary?.["NOT RESOLVED"] || 0;
     return {
-      total: resolved + notResolved,
+      total: resolved + acknowledged + notResolved,
       resolved,
+      acknowledged,
       notResolved
     };
   }, [dashboard.status_summary]);
+
+  const recentIssues = useMemo(() => {
+    return [...issues]
+      .sort((a, b) => {
+        const aTime = new Date(a.timestamp).getTime();
+        const bTime = new Date(b.timestamp).getTime();
+        if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+          return b.row_index - a.row_index;
+        }
+        return bTime - aTime;
+      })
+      .slice(0, 3);
+  }, [issues]);
 
   const hasAnyData = useMemo(() => {
     return (
@@ -77,14 +91,15 @@ function DashboardPage() {
               <>
                 <DashboardCharts dashboard={dashboard} />
                 <section className="space-y-3">
-                  <h2 className="text-lg font-semibold text-primaryDark">Recent Issues</h2>
-                  <IssuesTable issues={issues} />
+                  <h2 className="text-lg font-semibold text-primaryDark">Recent Complaints</h2>
+                  <IssuesTable issues={recentIssues} />
                 </section>
               </>
             )}
           </>
         ) : null}
       </main>
+      <FooterNote />
     </div>
   );
 }

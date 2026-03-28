@@ -1,11 +1,12 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
 pydantic-settings==2.10.1
+sqlalchemy==2.0.43
+psycopg2-binary==2.9.10
 requests==2.32.3
-gspread==6.2.1
-google-auth==2.40.3
 bcrypt==3.2.2
 python-jose==3.3.0
 apscheduler==3.10.4
 reportlab==4.2.2
 matplotlib==3.9.2
+openpyxl==3.1.5

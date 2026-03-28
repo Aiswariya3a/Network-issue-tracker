@@ -1,8 +1,11 @@
 import axios from "axios";
 import { clearAuthToken, getAuthToken } from "../utils/auth";
 
+const PRODUCTION_API_BASE_URL = "https://network-issue-tracker-d2dj.onrender.com";
+const defaultApiBaseUrl = import.meta.env.DEV ? "/api" : PRODUCTION_API_BASE_URL;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl,
   timeout: 15000
 });
 
@@ -40,10 +43,27 @@ export async function login(payload) {
   return data;
 }
 
-export async function updateIssueStatus(rowIndex, status, resolutionNote = "") {
+export async function updateIssueStatus(rowIndex, { status, ictMemberName, resolutionRemark = "" }) {
   const { data } = await api.put(`/update-status/${rowIndex}`, {
     status,
-    resolution_note: resolutionNote
+    ict_member_name: ictMemberName,
+    resolution_remark: resolutionRemark
   });
   return data;
+}
+
+export async function exportAdminReport(fromDate, toDate) {
+  const response = await api.get("/admin/export", {
+    params: {
+      from_date: fromDate,
+      to_date: toDate
+    },
+    responseType: "blob"
+  });
+
+  const disposition = response.headers?.["content-disposition"] || "";
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `complaints_report_${fromDate}_to_${toDate}.xlsx`;
+
+  return { blob: response.data, filename };
 }

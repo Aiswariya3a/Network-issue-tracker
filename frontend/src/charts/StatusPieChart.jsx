@@ -3,11 +3,15 @@ import { Pie } from "react-chartjs-2";
 
 function StatusPieChart({ statusSummary }) {
   const data = {
-    labels: ["Resolved", "Not Resolved"],
+    labels: ["RESOLVED", "ACKNOWLEDGED", "NOT RESOLVED"],
     datasets: [
       {
-        data: [statusSummary?.Resolved || 0, statusSummary?.["Not Resolved"] || 0],
-        backgroundColor: ["#16A34A", "#E53935"],
+        data: [
+          statusSummary?.RESOLVED || 0,
+          statusSummary?.ACKNOWLEDGED || 0,
+          statusSummary?.["NOT RESOLVED"] || 0
+        ],
+        backgroundColor: ["#16A34A", "#D97706", "#E53935"],
         borderColor: "#ffffff",
         borderWidth: 2
       }
