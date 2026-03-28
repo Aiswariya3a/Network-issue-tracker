@@ -27,7 +27,7 @@ https://docs.google.com/spreadsheets/d/<SHEET_ID>/export?format=csv
 ## Run
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn main:app --reload
 ```
 
 ## Endpoints
@@ -37,6 +37,25 @@ uvicorn app.main:app --reload
 - `POST /login`: Returns JWT access token.
 - `PUT /update-status/{row_index}`: Updates local status for a specific sheet row (Bearer token required).
 - `GET /health`: Health check.
+
+## Docker Deployment
+
+1. Copy `.env.example` to `.env` and fill values.
+2. Build and run:
+
+```bash
+docker compose up --build -d
+```
+
+3. Access:
+   - Frontend: `http://localhost:8080`
+   - Backend API: `http://localhost:8000`
+
+4. Stop:
+
+```bash
+docker compose down
+```
 
 ## Daily Email Report (6:00 PM)
 

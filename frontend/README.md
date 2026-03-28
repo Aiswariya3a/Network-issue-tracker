@@ -13,7 +13,7 @@ npm install
 2. (Optional) Create `.env`:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=/api
 ```
 
 3. Run:

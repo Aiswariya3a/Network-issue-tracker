@@ -1,0 +1,10 @@
+.git
+venv
+app/venv
+__pycache__
+*.pyc
+*.pyo
+.env
+issues.db
+frontend/node_modules
+frontend/dist
