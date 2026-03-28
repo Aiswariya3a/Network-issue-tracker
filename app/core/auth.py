@@ -15,9 +15,8 @@ ALLOWED_COORDINATOR_ROLES = {"ICT", "Infra"}
 
 
 def hash_password(password: str) -> str:
-    if len(password.encode("utf-8"))>72:
-        raise ValueError("Password too long(max 72 bytes for bcrypt)")
-    return pwd_context.hash(password)
+    return pwd_context.hash(password[:72])
+   
     
  
 
