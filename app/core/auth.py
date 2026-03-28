@@ -1,28 +1,25 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.db.user_repo import get_user_by_username
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 ALLOWED_COORDINATOR_ROLES = {"ICT", "Infra"}
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password[:72])
-   
-    
- 
-
+    password_bytes = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+    password_bytes = password.encode("utf-8")[:72]
+    return bcrypt.checkpw(password_bytes, password_hash.encode("utf-8"))
 
 
 def create_access_token(data: dict[str, Any]) -> str:
