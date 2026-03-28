@@ -1,0 +1,7 @@
+venv/
+.env
+/frontend/node_modules/
+__pycache__/
+*.pyc
+*.pyo
+service_account.json
