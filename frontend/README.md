@@ -13,7 +13,7 @@ npm install
 2. (Optional) Create `.env`:
 
 ```bash
-VITE_API_BASE_URL=/api
+VITE_API_BASE_URL=https://network-issue-tracker-d2dj.onrender.com
 ```
 
 3. Run:
@@ -36,3 +36,9 @@ npm run dev
 - Auto-refresh dashboard every 30 seconds
 - Responsive charts (status, issue type, location)
 - Admin filters and per-row status updates
+
+## Deploy Notes
+
+- Set `VITE_API_BASE_URL=https://network-issue-tracker-d2dj.onrender.com` in your frontend hosting environment.
+- If `VITE_API_BASE_URL` is not set, production builds default to `https://network-issue-tracker-d2dj.onrender.com`.
+- Local development still defaults to `/api` and uses Vite proxy from `vite.config.js`.

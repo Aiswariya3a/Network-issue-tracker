@@ -1,8 +1,11 @@
 import axios from "axios";
 import { clearAuthToken, getAuthToken } from "../utils/auth";
 
+const PRODUCTION_API_BASE_URL = "https://network-issue-tracker-d2dj.onrender.com";
+const defaultApiBaseUrl = import.meta.env.DEV ? "/api" : PRODUCTION_API_BASE_URL;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || defaultApiBaseUrl,
   timeout: 15000
 });
 
