@@ -1,6 +1,7 @@
 import csv
 import logging
 import smtplib
+from collections import Counter
 from datetime import datetime
 from email import encoders
 from email.mime.base import MIMEBase
@@ -10,12 +11,16 @@ from email.utils import formatdate, make_msgid
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+from app.db.database import get_session
+from app.db.orm_models import Complaint
 from app.models.status import STATUS_ACKNOWLEDGED, STATUS_NOT_RESOLVED, STATUS_RESOLVED
 from app.services.dashboard import get_dashboard_data
 from app.services.issues import get_all_issues
 from app.services.report_builder import generate_pdf_report, generate_pie_chart
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +59,46 @@ def _build_report_summary(dashboard: dict[str, Any]) -> dict[str, Any]:
         },
         "clusters": clusters,
     }
+
+
+def _build_report_summary_from_db() -> dict[str, Any]:
+    with get_session() as session:
+        complaints = session.execute(select(Complaint)).scalars().all()
+
+    issue_type_counter: Counter[str] = Counter()
+    location_counter: Counter[str] = Counter()
+    status_counter: Counter[str] = Counter()
+    cluster_counter: Counter[str] = Counter()
+
+    for complaint in complaints:
+        issue_type = (complaint.issue_type or "").strip()
+        if issue_type:
+            issue_type_counter[issue_type] += 1
+
+        floor = (complaint.floor or "").strip()
+        room = (complaint.room or "").strip()
+        if floor and room:
+            location_counter[f"{floor}-{room}"] += 1
+
+        status = (complaint.status or "").strip()
+        if status:
+            status_counter[status] += 1
+
+        cluster_key = (complaint.cluster_key or "").strip()
+        if cluster_key:
+            cluster_counter[cluster_key] += 1
+
+    dashboard_fallback = {
+        "issue_types": dict(issue_type_counter),
+        "location_stats": dict(location_counter),
+        "status_summary": {
+            STATUS_RESOLVED: int(status_counter.get(STATUS_RESOLVED, 0)),
+            STATUS_ACKNOWLEDGED: int(status_counter.get(STATUS_ACKNOWLEDGED, 0)),
+            STATUS_NOT_RESOLVED: int(status_counter.get(STATUS_NOT_RESOLVED, 0)),
+        },
+        "clusters": [{"cluster": cluster, "count": count} for cluster, count in cluster_counter.most_common()],
+    }
+    return _build_report_summary(dashboard_fallback)
 
 
 def _attach_file(message: MIMEMultipart, file_path: Path, mime_subtype: str = "octet-stream") -> None:
@@ -118,15 +163,27 @@ def send_daily_report() -> None:
             settings.smtp_host,
             settings.smtp_port,
         )
-        dashboard = get_dashboard_data()
-        summary = _build_report_summary(dashboard)
+        using_fallback = False
+        try:
+            dashboard = get_dashboard_data()
+            summary = _build_report_summary(dashboard)
+        except Exception as dashboard_exc:
+            using_fallback = True
+            logger.exception(
+                "Dashboard snapshot failed for daily report; falling back to DB summary: %s",
+                dashboard_exc,
+            )
+            summary = _build_report_summary_from_db()
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        tz = ZoneInfo(settings.scheduler_timezone)
+        today = datetime.now(tz).strftime("%Y-%m-%d")
         subject = f"Daily Network Report - {today}"
         body = (
             "Please find attached the daily network report with issue analysis "
             "and resolution summary."
         )
+        if using_fallback:
+            body += "\n\nNote: Report was generated from database snapshot due to temporary sheet fetch issue."
 
         with TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

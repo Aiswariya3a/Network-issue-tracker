@@ -1,6 +1,8 @@
 import logging
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from app.core.auth import get_current_user
 from app.models.issue import Issue
@@ -8,6 +10,7 @@ from app.models.status import STATUS_ACKNOWLEDGED, STATUS_NOT_RESOLVED, STATUS_R
 from app.services.complaint_sync import sync_complaints_from_sheet
 from app.services.dashboard import get_dashboard_data
 from app.services.issues import ALLOWED_TRANSITIONS, get_all_issues, update_issue_status
+from app.services.admin_export import build_admin_export_workbook, get_local_today
 from app.services.sheets import CSVFetchError
 
 router = APIRouter(tags=["issues"])
@@ -75,6 +78,30 @@ def post_sync_complaints(_: dict = Depends(get_current_user)) -> dict[str, int |
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to sync complaints: {exc}") from exc
+
+
+@router.get("/admin/export")
+def get_admin_export(
+    from_date: date | None = Query(default=None, description="YYYY-MM-DD"),
+    to_date: date | None = Query(default=None, description="YYYY-MM-DD"),
+    _: dict = Depends(get_current_user),
+) -> StreamingResponse:
+    try:
+        today = get_local_today()
+        final_from = from_date or today
+        final_to = to_date or today
+        excel_file = build_admin_export_workbook(from_date=final_from, to_date=final_to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to generate export: {exc}") from exc
+
+    filename = f"complaints_report_{final_from.isoformat()}_to_{final_to.isoformat()}.xlsx"
+    return StreamingResponse(
+        excel_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _update_status_handler(

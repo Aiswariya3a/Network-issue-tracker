@@ -1,6 +1,13 @@
-from datetime import datetime, timezone
+import logging
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
 
-from app.db.status_repo import get_status_details, get_status_details_map, update_status
+from sqlalchemy import select
+
+from app.core.config import settings
+from app.db.database import get_session
+from app.db.orm_models import Complaint
+from app.db.status_repo import get_status_details, update_status
 from app.models.issue import Issue
 from app.models.status import (
     ALLOWED_STATUSES,
@@ -8,9 +15,11 @@ from app.models.status import (
     STATUS_NOT_RESOLVED,
     STATUS_RESOLVED,
 )
-from app.services.complaint_sync import build_complaint_key, sync_complaints
+from app.services.complaint_sync import sync_complaints
 from app.services.resolution_email import send_status_email
 from app.services.sheets import fetch_issues
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_TRANSITIONS = {
     STATUS_NOT_RESOLVED: {STATUS_ACKNOWLEDGED, STATUS_RESOLVED},
@@ -19,27 +28,70 @@ ALLOWED_TRANSITIONS = {
 }
 
 
+def _local_day_bounds(target_day: date) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(settings.scheduler_timezone)
+    start_local = datetime.combine(target_day, time.min).replace(tzinfo=tz)
+    end_local = datetime.combine(target_day, time.max).replace(tzinfo=tz)
+    return (start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc))
+
+
+def _today_local_date() -> date:
+    return datetime.now(ZoneInfo(settings.scheduler_timezone)).date()
+
+
+def _to_utc_aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        # DB timestamps may be stored as naive UTC datetimes.
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _to_issue(complaint: Complaint) -> Issue:
+    return Issue(
+        row_index=int(complaint.id),
+        complaint_key=complaint.complaint_key,
+        timestamp=complaint.sheet_timestamp or "",
+        email=complaint.email or "",
+        floor=complaint.floor or "",
+        room=complaint.room or "",
+        ssid=complaint.ssid or "",
+        location=complaint.location or "",
+        issue_type=complaint.issue_type or "",
+        description=complaint.description or "",
+        cluster_key=complaint.cluster_key or "",
+        status=str(complaint.status),
+        ict_member_name=complaint.ict_member_name,
+        resolution_remark=complaint.resolution_remark,
+        acknowledged_at=complaint.acknowledged_at,
+        resolved_at=complaint.resolved_at,
+    )
+
+
 def get_all_issues() -> list[Issue]:
-    issues = fetch_issues()
-    # Persist new sheet rows first; existing complaints are never overwritten.
-    sync_complaints(issues)
+    # Best-effort sync from the sheet; UI should still work from DB if sheet is temporarily unavailable.
+    try:
+        issues = fetch_issues()
+        sync_complaints(issues)
+    except Exception as exc:
+        logger.warning("Sheet sync skipped while building issues list: %s", exc)
 
-    complaint_keys = [build_complaint_key(issue) for issue in issues]
-    details_map = get_status_details_map(complaint_keys)
-    for issue in issues:
-        complaint_key = build_complaint_key(issue)
-        details = details_map.get(complaint_key)
-        if details is None:
-            issue.status = STATUS_NOT_RESOLVED
-            continue
+    today_local = _today_local_date()
+    day_start_utc, day_end_utc = _local_day_bounds(today_local)
 
-        issue.complaint_key = complaint_key
-        issue.status = str(details["status"])
-        issue.ict_member_name = details["ict_member_name"]
-        issue.resolution_remark = details["resolution_remark"]
-        issue.acknowledged_at = details["acknowledged_at"]
-        issue.resolved_at = details["resolved_at"]
-    return issues
+    with get_session() as session:
+        complaints = session.execute(select(Complaint).order_by(Complaint.created_at.desc())).scalars().all()
+
+    visible = [
+        complaint
+        for complaint in complaints
+        if (
+            complaint.status == STATUS_NOT_RESOLVED
+            or ((created_at_utc := _to_utc_aware(complaint.created_at)) is not None and day_start_utc <= created_at_utc <= day_end_utc)
+        )
+    ]
+    return [_to_issue(complaint) for complaint in visible]
 
 
 def update_issue_status(
@@ -50,24 +102,20 @@ def update_issue_status(
 ) -> None:
     if status not in ALLOWED_STATUSES:
         raise ValueError("Status must be one of: NOT RESOLVED, ACKNOWLEDGED, RESOLVED.")
-    if row_index < 2:
-        raise LookupError("Invalid row_index. Row index must be >= 2.")
+    if row_index < 1:
+        raise LookupError("Invalid complaint id.")
 
-    issues = fetch_issues()
-    issue = next((item for item in issues if item.row_index == row_index), None)
-    if issue is None:
-        raise LookupError(f"Issue row {row_index} was not found in the current sheet data.")
+    with get_session() as session:
+        complaint = session.execute(select(Complaint).where(Complaint.id == row_index)).scalar_one_or_none()
+    if complaint is None:
+        raise LookupError(f"Complaint {row_index} was not found.")
 
-    complaint_key = build_complaint_key(issue)
-    issue.complaint_key = complaint_key
-
-    # Ensure complaint exists in DB before attempting status changes.
-    sync_complaints(issues)
-
+    complaint_key = complaint.complaint_key
+    issue = _to_issue(complaint)
     existing = get_status_details(complaint_key=complaint_key)
     existing_status = str(existing["status"])
     if existing_status == status:
-        raise ValueError(f"Issue row {row_index} is already in status '{status}'.")
+        raise ValueError(f"Complaint {row_index} is already in status '{status}'.")
 
     allowed_next = ALLOWED_TRANSITIONS.get(existing_status, set())
     if status not in allowed_next:

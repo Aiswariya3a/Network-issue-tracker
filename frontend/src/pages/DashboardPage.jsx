@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardCharts from "../components/DashboardCharts";
 import ErrorMessage from "../components/ErrorMessage";
+import FooterNote from "../components/FooterNote";
 import Header from "../components/Header";
 import IssuesTable from "../components/IssuesTable";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -98,6 +99,7 @@ function DashboardPage() {
           </>
         ) : null}
       </main>
+      <FooterNote />
     </div>
   );
 }

@@ -37,6 +37,7 @@ uvicorn main:app --reload
 - `GET /dashboard`: Returns aggregated analytics computed dynamically from merged issue data.
 - `GET /status-workflow`: Returns allowed statuses, transition matrix, and field validation rules.
 - `POST /sync-complaints`: Pulls current sheet rows and inserts only new complaints into PostgreSQL (dedupe-safe).
+- `GET /admin/export?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD`: Downloads one Excel file for ACKNOWLEDGED/RESOLVED complaints in the selected range (max last 30 days).
 - `POST /login`: Returns JWT access token.
 - `PUT /issues/{row_index}/status`: Updates complaint status with transition validation and ICT metadata (Bearer token required).
 - `PUT /update-status/{row_index}`: Backward-compatible alias for the same status update workflow.
@@ -98,6 +99,7 @@ Compatibility notes:
 - Existing table names are preserved: `users`, `issue_status`.
 - Existing columns are preserved: `users(id, username, password_hash, role)`, `issue_status(id, row_index, status)`.
 - New timestamp columns are auto-added when missing: `issue_status.created_at`, `issue_status.updated_at`.
+- Archive table used by retention cleanup: `archived_complaints`.
 
 ## Complaint Sync Design
 
@@ -115,6 +117,33 @@ Sync behavior:
 - Existing rows are never overwritten by sheet data.
 - Status history (`NOT RESOLVED`/`ACKNOWLEDGED`/`RESOLVED`) persists in DB even after sheet reset.
 - Sync runs at app startup and can be triggered manually via `POST /sync-complaints`.
+
+## Admin Excel Export
+
+- Available from admin UI via **Download Resolved Issues**.
+- Date range supports single-day export (`from_date == to_date`).
+- Only the last 30 days are allowed.
+- Export includes only `ACKNOWLEDGED` and `RESOLVED` complaints.
+
+Columns:
+- Complaint ID
+- Title / Description
+- Location (Floor, Room, SSID)
+- User Email
+- Status
+- Resolution Note
+- Resolved By (ICT Name)
+- Created At
+- Resolved At
+
+## Data Retention
+
+- Runs once daily via APScheduler.
+- Deletes complaints older than `RETENTION_DAYS` from main `complaints` table.
+- Deletes only statuses: `ACKNOWLEDGED`, `RESOLVED`.
+- `NOT RESOLVED` complaints are never deleted by retention job.
+- When `ARCHIVE_BEFORE_DELETE=true`, records are copied to `archived_complaints` before deletion.
+- Configs: `RETENTION_DAYS`, `RETENTION_CLEANUP_HOUR`, `RETENTION_CLEANUP_MINUTE`, `ARCHIVE_BEFORE_DELETE`.
 
 ## Daily Email Report (6:00 PM)
 

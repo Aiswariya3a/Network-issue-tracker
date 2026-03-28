@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     report_test_interval_minutes: int = 0
     attach_raw_csv_report: bool = False
     frontend_origin: str = "http://localhost:5173"
+    retention_days: int = 30
+    retention_cleanup_hour: int = 1
+    retention_cleanup_minute: int = 30
+    archive_before_delete: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

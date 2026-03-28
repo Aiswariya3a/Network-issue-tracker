@@ -51,3 +51,19 @@ export async function updateIssueStatus(rowIndex, { status, ictMemberName, resol
   });
   return data;
 }
+
+export async function exportAdminReport(fromDate, toDate) {
+  const response = await api.get("/admin/export", {
+    params: {
+      from_date: fromDate,
+      to_date: toDate
+    },
+    responseType: "blob"
+  });
+
+  const disposition = response.headers?.["content-disposition"] || "";
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `complaints_report_${fromDate}_to_${toDate}.xlsx`;
+
+  return { blob: response.data, filename };
+}
