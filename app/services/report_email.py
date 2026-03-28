@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from app.core.config import settings
+from app.models.status import STATUS_ACKNOWLEDGED, STATUS_NOT_RESOLVED, STATUS_RESOLVED
 from app.services.dashboard import get_dashboard_data
 from app.services.issues import get_all_issues
 from app.services.report_builder import generate_pdf_report, generate_pie_chart
@@ -32,21 +33,24 @@ def _build_report_summary(dashboard: dict[str, Any]) -> dict[str, Any]:
     clusters = dashboard.get("clusters", [])
 
     total_issues = int(sum(int(v) for v in issue_types.values()))
-    resolved_count = int(status_summary.get("Resolved", 0))
-    not_resolved_count = int(status_summary.get("Not Resolved", 0))
+    resolved_count = int(status_summary.get(STATUS_RESOLVED, 0))
+    acknowledged_count = int(status_summary.get(STATUS_ACKNOWLEDGED, 0))
+    not_resolved_count = int(status_summary.get(STATUS_NOT_RESOLVED, 0))
     resolution_rate = (resolved_count / total_issues * 100) if total_issues > 0 else 0.0
 
     return {
         "total_issues": total_issues,
         "resolved_count": resolved_count,
+        "acknowledged_count": acknowledged_count,
         "not_resolved_count": not_resolved_count,
         "resolution_rate": resolution_rate,
         "top_issue_type": _safe_max_key(issue_types),
         "most_affected_location": _safe_max_key(location_stats),
         "issue_types": issue_types,
         "status_summary": {
-            "Resolved": int(status_summary.get("Resolved", 0)),
-            "Not Resolved": int(status_summary.get("Not Resolved", 0)),
+            STATUS_RESOLVED: int(status_summary.get(STATUS_RESOLVED, 0)),
+            STATUS_ACKNOWLEDGED: int(status_summary.get(STATUS_ACKNOWLEDGED, 0)),
+            STATUS_NOT_RESOLVED: int(status_summary.get(STATUS_NOT_RESOLVED, 0)),
         },
         "clusters": clusters,
     }
@@ -67,6 +71,7 @@ def _write_raw_csv(file_path: Path) -> None:
     issues = get_all_issues()
     headers = [
         "row_index",
+        "complaint_key",
         "timestamp",
         "email",
         "floor",
@@ -85,6 +90,7 @@ def _write_raw_csv(file_path: Path) -> None:
             writer.writerow(
                 [
                     issue.row_index,
+                    issue.complaint_key or "",
                     issue.timestamp,
                     issue.email,
                     issue.floor,

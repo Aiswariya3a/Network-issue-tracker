@@ -1,8 +1,9 @@
 # Network Performance Tracker - FastAPI Backend
 
 FastAPI backend that reads Google Sheet data from a **public CSV URL** and exposes issues via `GET /issues`.
-Issue status updates are stored locally in SQLite and protected with JWT authentication.
+Issue status updates are stored in PostgreSQL and protected with JWT authentication.
 It also sends an automated daily analytics email report using APScheduler, with a PDF attachment and chart.
+No Google service account is required for this flow.
 
 ## Setup
 
@@ -32,10 +33,13 @@ uvicorn main:app --reload
 
 ## Endpoints
 
-- `GET /issues`: Fetches latest CSV rows in real time, skips empty rows and bad rows, merges local SQLite status, and returns structured JSON.
+- `GET /issues`: Fetches latest CSV rows in real time, skips empty rows and bad rows, merges stored PostgreSQL status, and returns structured JSON.
 - `GET /dashboard`: Returns aggregated analytics computed dynamically from merged issue data.
+- `GET /status-workflow`: Returns allowed statuses, transition matrix, and field validation rules.
+- `POST /sync-complaints`: Pulls current sheet rows and inserts only new complaints into PostgreSQL (dedupe-safe).
 - `POST /login`: Returns JWT access token.
-- `PUT /update-status/{row_index}`: Updates local status for a specific sheet row (Bearer token required).
+- `PUT /issues/{row_index}/status`: Updates complaint status with transition validation and ICT metadata (Bearer token required).
+- `PUT /update-status/{row_index}`: Backward-compatible alias for the same status update workflow.
 - `GET /health`: Health check.
 
 ## Docker Deployment
@@ -47,6 +51,9 @@ uvicorn main:app --reload
 docker compose up --build -d
 ```
 
+PostgreSQL is persisted in a named Docker volume (`postgres_data`) mounted at `/var/lib/postgresql/data`.
+Persisted `complaints` records include `created_at` and `updated_at` timestamps for date/time persistence.
+
 3. Access:
    - Frontend: `http://localhost:8080`
    - Backend API: `http://localhost:8000`
@@ -56,6 +63,58 @@ docker compose up --build -d
 ```bash
 docker compose down
 ```
+
+## PostgreSQL Connection
+
+Set database URL in `.env` for non-Docker runs:
+
+```text
+DATABASE_URL=postgresql+psycopg2://npt_user:npt_password@localhost:5432/npt_db
+```
+
+`DATABASE_URL` is required and must be a PostgreSQL SQLAlchemy URL.
+
+## Migrate Existing SQLite Data to PostgreSQL
+
+1. Ensure PostgreSQL is running and `TARGET_DATABASE_URL` is set:
+
+```bash
+set TARGET_DATABASE_URL=postgresql+psycopg2://npt_user:npt_password@localhost:5432/npt_db
+```
+
+2. Optionally point to a specific SQLite file (defaults to `issues.db`):
+
+```bash
+set SOURCE_SQLITE_DB_PATH=issues.db
+```
+
+3. Run migration:
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py
+```
+
+Compatibility notes:
+- Existing table names are preserved: `users`, `issue_status`.
+- Existing columns are preserved: `users(id, username, password_hash, role)`, `issue_status(id, row_index, status)`.
+- New timestamp columns are auto-added when missing: `issue_status.created_at`, `issue_status.updated_at`.
+
+## Complaint Sync Design
+
+The sheet can reset daily, so row numbers are not treated as persistent IDs.
+
+Persistence strategy:
+- Complaints are stored in `complaints` table.
+- Every complaint gets a deterministic `complaint_key` (SHA-256 hash) from:
+  `timestamp + email + location + issue_type + description + cluster_key`.
+- `complaint_key` is `UNIQUE`, so duplicates are ignored.
+
+Sync behavior:
+- Sync reads sheet rows.
+- Inserts only rows with new `complaint_key`.
+- Existing rows are never overwritten by sheet data.
+- Status history (`NOT RESOLVED`/`ACKNOWLEDGED`/`RESOLVED`) persists in DB even after sheet reset.
+- Sync runs at app startup and can be triggered manually via `POST /sync-complaints`.
 
 ## Daily Email Report (6:00 PM)
 
@@ -67,7 +126,7 @@ docker compose down
 Summary includes:
 
 - Total issues
-- Resolved / Not Resolved counts
+- RESOLVED / ACKNOWLEDGED / NOT RESOLVED counts
 - Resolution rate
 - Top issue type
 - Most affected location
@@ -112,7 +171,11 @@ This runs the job every minute for testing. Set it back to `0` for daily schedul
     "issue_type": "...",
     "time_slot": "...",
     "description": "...",
-    "status": "Not Resolved"
+    "status": "NOT RESOLVED",
+    "ict_member_name": null,
+    "resolution_remark": null,
+    "acknowledged_at": null,
+    "resolved_at": null
   }
 ]
 ```
@@ -121,14 +184,28 @@ This runs the job every minute for testing. Set it back to `0` for daily schedul
 
 ```json
 {
-  "status": "Resolved"
+  "status": "ACKNOWLEDGED",
+  "ict_member_name": "ICT Member Name",
+  "resolution_remark": "Ticket picked up and diagnostics started."
 }
 ```
 
 Allowed values:
 
-- `Resolved`
-- `Not Resolved`
+- `NOT RESOLVED` (default)
+- `ACKNOWLEDGED` (requires `ict_member_name`, `resolution_remark`)
+- `RESOLVED` (requires `ict_member_name`, `resolution_remark` optional)
+
+Validation:
+
+- `ict_member_name` is required whenever status is updated.
+- `resolution_remark` is mandatory only for `ACKNOWLEDGED`.
+
+Status transitions:
+
+- `NOT RESOLVED` -> `ACKNOWLEDGED`, `RESOLVED`
+- `ACKNOWLEDGED` -> `RESOLVED`, `NOT RESOLVED`
+- `RESOLVED` -> no further transitions
 
 ## Authentication
 

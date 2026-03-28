@@ -14,6 +14,7 @@ function AdminPage() {
   const [filters, setFilters] = useState({ floor: "", issueType: "", status: "" });
   const [selectedStatusMap, setSelectedStatusMap] = useState({});
   const [resolutionNoteMap, setResolutionNoteMap] = useState({});
+  const [ictNameMap, setIctNameMap] = useState({});
   const [pendingMap, setPendingMap] = useState({});
   const [toast, setToast] = useState({ message: "", type: "success" });
 
@@ -22,6 +23,9 @@ function AdminPage() {
       setError("");
       const data = await fetchIssues();
       setIssues(data);
+      setSelectedStatusMap({});
+      setResolutionNoteMap({});
+      setIctNameMap({});
     } catch (err) {
       const message = err?.response?.data?.detail || "Failed to load issues.";
       setError(message);
@@ -47,7 +51,7 @@ function AdminPage() {
     () => ({
       floors: Array.from(new Set(issues.map((item) => item.floor).filter(Boolean))).sort(),
       issueTypes: Array.from(new Set(issues.map((item) => item.issue_type).filter(Boolean))).sort(),
-      statuses: ["Resolved", "Not Resolved"]
+      statuses: ["NOT RESOLVED", "ACKNOWLEDGED", "RESOLVED"]
     }),
     [issues]
   );
@@ -59,27 +63,63 @@ function AdminPage() {
 
   const handleStatusChange = (rowIndex, value) => {
     setSelectedStatusMap((prev) => ({ ...prev, [rowIndex]: value }));
-    if (value !== "Resolved") {
-      setResolutionNoteMap((prev) => ({ ...prev, [rowIndex]: "" }));
-    }
   };
 
   const handleResolutionNoteChange = (rowIndex, value) => {
     setResolutionNoteMap((prev) => ({ ...prev, [rowIndex]: value }));
   };
 
+  const handleIctNameChange = (rowIndex, value) => {
+    setIctNameMap((prev) => ({ ...prev, [rowIndex]: value }));
+  };
+
   const handleUpdate = async (rowIndex) => {
     const issue = issues.find((item) => item.row_index === rowIndex);
     if (!issue) return;
+
     const statusToSend = selectedStatusMap[rowIndex] || issue.status;
-    const resolutionNote = resolutionNoteMap[rowIndex] || "";
+    const resolutionRemark = resolutionNoteMap[rowIndex] ?? issue.resolution_remark ?? "";
+    const ictMemberName = (ictNameMap[rowIndex] ?? issue.ict_member_name ?? "").trim();
+
+    if (!ictMemberName) {
+      showToast("ICT member name is required.", "error");
+      return;
+    }
+    if (statusToSend === "ACKNOWLEDGED" && !resolutionRemark.trim()) {
+      showToast("Resolution note is mandatory for ACKNOWLEDGED.", "error");
+      return;
+    }
 
     setPendingMap((prev) => ({ ...prev, [rowIndex]: true }));
     try {
-      await updateIssueStatus(rowIndex, statusToSend, resolutionNote);
-      setIssues((prev) =>
-        prev.map((item) => (item.row_index === rowIndex ? { ...item, status: statusToSend } : item))
-      );
+      await updateIssueStatus(rowIndex, {
+        status: statusToSend,
+        ictMemberName,
+        resolutionRemark
+      });
+      setIssues((prev) => {
+        const updated = prev.map((item) =>
+          item.row_index === rowIndex
+            ? {
+                ...item,
+                status: statusToSend,
+                ict_member_name: ictMemberName,
+                resolution_remark: resolutionRemark
+              }
+            : item
+        );
+
+        if (!["ACKNOWLEDGED", "RESOLVED"].includes(statusToSend)) {
+          return updated;
+        }
+
+        const idx = updated.findIndex((item) => item.row_index === rowIndex);
+        if (idx < 0) {
+          return updated;
+        }
+        const moved = updated[idx];
+        return [...updated.slice(0, idx), ...updated.slice(idx + 1), moved];
+      });
       showToast("Status updated successfully.", "success");
     } catch (err) {
       if (err?.response?.status === 401) {
@@ -97,7 +137,7 @@ function AdminPage() {
     <div className="min-h-screen bg-bgLight">
       <Header />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-primaryDark">Admin Panel</h2>
           <button
             type="button"
@@ -123,8 +163,10 @@ function AdminPage() {
             pendingMap={pendingMap}
             selectedStatusMap={selectedStatusMap}
             resolutionNoteMap={resolutionNoteMap}
+            ictNameMap={ictNameMap}
             onStatusChange={handleStatusChange}
             onResolutionNoteChange={handleResolutionNoteChange}
+            onIctNameChange={handleIctNameChange}
             onUpdate={handleUpdate}
           />
         ) : null}

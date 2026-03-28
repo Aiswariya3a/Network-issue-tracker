@@ -10,11 +10,13 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.models.status import STATUS_ACKNOWLEDGED, STATUS_NOT_RESOLVED, STATUS_RESOLVED
+
 
 def generate_pie_chart(status_counts: dict[str, int], output_path: str = "status_chart.png") -> str:
     labels = []
     values = []
-    for label in ["Resolved", "Not Resolved"]:
+    for label in [STATUS_RESOLVED, STATUS_ACKNOWLEDGED, STATUS_NOT_RESOLVED]:
         count = int(status_counts.get(label, 0))
         if count > 0:
             labels.append(label)
@@ -25,7 +27,12 @@ def generate_pie_chart(status_counts: dict[str, int], output_path: str = "status
         values = [1]
 
     fig, ax = plt.subplots(figsize=(6, 4))
-    colors_list = ["#10b981", "#ef4444"] if len(values) > 1 else ["#94a3b8"]
+    colors_palette = {
+        STATUS_RESOLVED: "#10b981",
+        STATUS_ACKNOWLEDGED: "#f59e0b",
+        STATUS_NOT_RESOLVED: "#ef4444",
+    }
+    colors_list = [colors_palette.get(label, "#94a3b8") for label in labels] if len(values) > 1 else ["#94a3b8"]
     ax.pie(values, labels=labels, autopct="%1.1f%%", startangle=120, colors=colors_list)
     ax.set_title("Status Distribution")
     ax.axis("equal")
@@ -47,8 +54,9 @@ def generate_pdf_report(data: dict[str, Any], chart_path: str, output_path: str 
     summary_rows = [
         ["Metric", "Value"],
         ["Total Issues", str(data["total_issues"])],
-        ["Resolved", str(data["resolved_count"])],
-        ["Not Resolved", str(data["not_resolved_count"])],
+        [STATUS_RESOLVED, str(data["resolved_count"])],
+        [STATUS_ACKNOWLEDGED, str(data.get("acknowledged_count", 0))],
+        [STATUS_NOT_RESOLVED, str(data["not_resolved_count"])],
         ["Resolution %", f"{data['resolution_rate']:.2f}%"],
     ]
     summary_table = Table(summary_rows, colWidths=[200, 250])
@@ -78,7 +86,7 @@ def generate_pdf_report(data: dict[str, Any], chart_path: str, output_path: str 
         issue_rows.append(["None", "0"])
 
     status_rows = [["Status", "Count"]]
-    for status in ["Resolved", "Not Resolved"]:
+    for status in [STATUS_RESOLVED, STATUS_ACKNOWLEDGED, STATUS_NOT_RESOLVED]:
         status_rows.append([status, str(data["status_summary"].get(status, 0))])
 
     issue_table = Table(issue_rows, colWidths=[300, 150])

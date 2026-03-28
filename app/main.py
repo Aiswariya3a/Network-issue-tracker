@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.api.routes.issues import router as issues_router
 from app.db.database import init_db
 from app.services.auth import seed_default_user
+from app.services.complaint_sync import sync_complaints_from_sheet
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -33,6 +34,10 @@ def on_startup() -> None:
     logger.info("Starting application...")
     init_db()
     seed_default_user()
+    try:
+        sync_complaints_from_sheet()
+    except Exception as exc:
+        logger.warning("Initial complaint sync skipped due to error: %s", exc)
     start_scheduler()
 
 

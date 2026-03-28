@@ -12,19 +12,19 @@ function Header() {
 
   return (
     <header className="sticky top-0 z-10 border-b border-cardBorder bg-white/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-lg font-bold text-white">
-            NI
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-base font-bold text-white sm:h-16 sm:w-20 sm:text-lg">
+            kgNIMS
           </div>
           <div>
-            <h1 className="font-poppins text-lg font-semibold text-primaryDark sm:text-xl">
-              Network Issue Monitoring System
+            <h1 className="font-poppins text-base font-semibold text-primaryDark sm:text-xl">
+              Network Issues Monitoring System
             </h1>
           </div>
         </div>
 
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center gap-2 self-start sm:self-auto">
           <Link
             to="/"
             className={`rounded-lg px-3 py-2 text-sm font-medium transition ${

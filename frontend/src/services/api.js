@@ -43,10 +43,11 @@ export async function login(payload) {
   return data;
 }
 
-export async function updateIssueStatus(rowIndex, status, resolutionNote = "") {
+export async function updateIssueStatus(rowIndex, { status, ictMemberName, resolutionRemark = "" }) {
   const { data } = await api.put(`/update-status/${rowIndex}`, {
     status,
-    resolution_note: resolutionNote
+    ict_member_name: ictMemberName,
+    resolution_remark: resolutionRemark
   });
   return data;
 }
