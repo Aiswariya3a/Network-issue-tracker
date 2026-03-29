@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import ErrorMessage from "../components/ErrorMessage";
 import FooterNote from "../components/FooterNote";
+import Toast from "../components/Toast";
 import { login } from "../services/api";
 import { setAuthToken } from "../utils/auth";
 
@@ -12,8 +13,23 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ message: "", type: "success" });
 
   const from = location.state?.from?.pathname || "/admin";
+
+  useEffect(() => {
+    if (!location.state?.sessionExpired) {
+      return;
+    }
+
+    setToast({ message: "Session expired. Please login again.", type: "error" });
+    const timerId = window.setTimeout(() => {
+      setToast({ message: "", type: "success" });
+    }, 2500);
+
+    navigate("/login", { replace: true, state: { from: location.state?.from } });
+    return () => window.clearTimeout(timerId);
+  }, [location.state, navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -82,6 +98,7 @@ function LoginPage() {
         </div>
       </div>
       <FooterNote />
+      <Toast message={toast.message} type={toast.type} />
     </div>
   );
 }
