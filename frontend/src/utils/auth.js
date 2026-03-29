@@ -17,6 +17,6 @@ export function isAuthenticated() {
   return Boolean(getAuthToken());
 }
 
-export function triggerLogoutRedirect() {
-  window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
+export function triggerLogoutRedirect(reason = "expired") {
+  window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT, { detail: { reason } }));
 }

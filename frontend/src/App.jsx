@@ -11,11 +11,15 @@ function App() {
   const location = useLocation();
 
   useEffect(() => {
-    const handleLogout = () => {
+    const handleLogout = (event) => {
       if (location.pathname === "/login") {
         return;
       }
-      navigate("/login", { replace: true, state: { from: location } });
+      const reason = event?.detail?.reason;
+      navigate("/login", {
+        replace: true,
+        state: { from: location, sessionExpired: reason === "expired" }
+      });
     };
 
     window.addEventListener(AUTH_LOGOUT_EVENT, handleLogout);

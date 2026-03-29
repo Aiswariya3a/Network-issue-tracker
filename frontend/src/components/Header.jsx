@@ -7,7 +7,7 @@ function Header() {
 
   const handleLogout = () => {
     clearAuthToken();
-    triggerLogoutRedirect();
+    triggerLogoutRedirect("manual");
   };
 
   return (
