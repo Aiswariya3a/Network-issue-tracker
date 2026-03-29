@@ -1,5 +1,5 @@
 import axios from "axios";
-import { clearAuthToken, getAuthToken } from "../utils/auth";
+import { clearAuthToken, getAuthToken, triggerLogoutRedirect } from "../utils/auth";
 
 const PRODUCTION_API_BASE_URL = "https://network-issue-tracker-d2dj.onrender.com";
 const defaultApiBaseUrl = import.meta.env.DEV ? "/api" : PRODUCTION_API_BASE_URL;
@@ -21,8 +21,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error("API error:", error?.response || error);
-    if (error.response?.status === 401) {
+    if ([401, 403].includes(error.response?.status)) {
       clearAuthToken();
+      triggerLogoutRedirect();
     }
     return Promise.reject(error);
   }

@@ -51,6 +51,7 @@ function AdminPage() {
       setResolutionNoteMap({});
       setIctNameMap({});
     } catch (err) {
+      if ([401, 403].includes(err?.response?.status)) return;
       const message = err?.response?.data?.detail || "Failed to load issues.";
       setError(message);
     } finally {
@@ -146,10 +147,7 @@ function AdminPage() {
       });
       showToast("Status updated successfully.", "success");
     } catch (err) {
-      if (err?.response?.status === 401) {
-        window.location.href = "/login";
-        return;
-      }
+      if ([401, 403].includes(err?.response?.status)) return;
       const message = err?.response?.data?.detail || "Failed to update status.";
       showToast(message, "error");
     } finally {
@@ -189,6 +187,7 @@ function AdminPage() {
       showToast("Report downloaded.", "success");
       setShowExportPanel(false);
     } catch (err) {
+      if ([401, 403].includes(err?.response?.status)) return;
       const message = err?.response?.data?.detail || "Failed to download report.";
       showToast(message, "error");
     } finally {
