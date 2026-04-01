@@ -20,6 +20,7 @@ from app.services.resolution_email import send_status_email
 from app.services.sheets import fetch_issues
 
 logger = logging.getLogger(__name__)
+OPEN_STATUSES = {STATUS_NOT_RESOLVED, STATUS_ACKNOWLEDGED}
 
 ALLOWED_TRANSITIONS = {
     STATUS_NOT_RESOLVED: {STATUS_ACKNOWLEDGED, STATUS_RESOLVED},
@@ -87,7 +88,7 @@ def get_all_issues() -> list[Issue]:
         complaint
         for complaint in complaints
         if (
-            complaint.status == STATUS_NOT_RESOLVED
+            complaint.status in OPEN_STATUSES
             or ((created_at_utc := _to_utc_aware(complaint.created_at)) is not None and day_start_utc <= created_at_utc <= day_end_utc)
         )
     ]

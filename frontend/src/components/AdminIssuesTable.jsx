@@ -39,7 +39,7 @@ function AdminActions({
   const ictNameText = ictNameMap[issue.row_index] ?? issue.ict_member_name ?? "";
   const needsRemark = selectedStatus === "ACKNOWLEDGED";
   const disableDetailInputs = selectedStatus === "NOT RESOLVED";
-  const isUpdated = issue.status === "ACKNOWLEDGED" || issue.status === "RESOLVED";
+  const isUpdated = issue.status === "RESOLVED";
   const finalIctName = issue.ict_member_name || ictNameText || "-";
   const finalResolutionRemark = issue.resolution_remark || resolutionText || "-";
 
