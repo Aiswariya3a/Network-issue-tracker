@@ -5,7 +5,7 @@ from sqlalchemy import and_, select
 
 from app.db.database import get_session
 from app.db.orm_models import ArchivedComplaint, Complaint
-from app.models.status import STATUS_ACKNOWLEDGED, STATUS_RESOLVED
+from app.models.status import STATUS_RESOLVED
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,8 @@ def cleanup_old_complaints(retention_days: int, archive_before_delete: bool = Tr
             session.execute(
                 select(Complaint).where(
                     and_(
-                        Complaint.status.in_([STATUS_ACKNOWLEDGED, STATUS_RESOLVED]),
+                        # Keep ACKNOWLEDGED complaints active; cleanup only finalized RESOLVED items.
+                        Complaint.status.in_([STATUS_RESOLVED]),
                         Complaint.created_at < cutoff,
                     )
                 )

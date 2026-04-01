@@ -140,8 +140,8 @@ Columns:
 
 - Runs once daily via APScheduler.
 - Deletes complaints older than `RETENTION_DAYS` from main `complaints` table.
-- Deletes only statuses: `ACKNOWLEDGED`, `RESOLVED`.
-- `NOT RESOLVED` complaints are never deleted by retention job.
+- Deletes only status: `RESOLVED`.
+- `NOT RESOLVED` and `ACKNOWLEDGED` complaints are never deleted by retention job.
 - When `ARCHIVE_BEFORE_DELETE=true`, records are copied to `archived_complaints` before deletion.
 - Configs: `RETENTION_DAYS`, `RETENTION_CLEANUP_HOUR`, `RETENTION_CLEANUP_MINUTE`, `ARCHIVE_BEFORE_DELETE`.
 
