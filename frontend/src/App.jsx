@@ -18,7 +18,11 @@ function App() {
       const reason = event?.detail?.reason;
       navigate("/login", {
         replace: true,
-        state: { from: location, sessionExpired: reason === "expired" }
+        state: {
+          from: location,
+          sessionExpired: reason === "expired",
+          unauthorized: reason === "unauthorized"
+        }
       });
     };
 
@@ -33,7 +37,7 @@ function App() {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireCoordinatorRole>
             <AdminPage />
           </ProtectedRoute>
         }
