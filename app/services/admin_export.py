@@ -3,7 +3,7 @@ from io import BytesIO
 from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 
 from app.core.config import settings
 from app.db.database import get_session
@@ -37,20 +37,37 @@ def _fmt_datetime(value: datetime | None) -> str:
     return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _local_range_to_utc(from_date: date, to_date: date) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(settings.scheduler_timezone)
+    local_start = datetime.combine(from_date, time.min).replace(tzinfo=tz)
+    local_end = datetime.combine(to_date, time.max).replace(tzinfo=tz)
+    return (local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc))
+
+
 def build_admin_export_workbook(from_date: date, to_date: date) -> BytesIO:
     validate_export_date_range(from_date=from_date, to_date=to_date)
 
-    from_dt = datetime.combine(from_date, time.min, tzinfo=timezone.utc)
-    to_dt = datetime.combine(to_date, time.max, tzinfo=timezone.utc)
+    from_dt, to_dt = _local_range_to_utc(from_date=from_date, to_date=to_date)
 
     with get_session() as session:
         rows = (
             session.execute(
                 select(Complaint).where(
-                    and_(
-                        Complaint.status.in_([STATUS_ACKNOWLEDGED, STATUS_RESOLVED]),
-                        Complaint.created_at >= from_dt,
-                        Complaint.created_at <= to_dt,
+                    or_(
+                        and_(
+                            Complaint.status == STATUS_RESOLVED,
+                            # Export resolved issues by resolution timestamp.
+                            # Fallback to created_at for older rows that may miss resolved_at.
+                            or_(
+                                and_(Complaint.resolved_at.is_not(None), Complaint.resolved_at >= from_dt, Complaint.resolved_at <= to_dt),
+                                and_(Complaint.resolved_at.is_(None), Complaint.created_at >= from_dt, Complaint.created_at <= to_dt),
+                            ),
+                        ),
+                        and_(
+                            Complaint.status == STATUS_ACKNOWLEDGED,
+                            Complaint.created_at >= from_dt,
+                            Complaint.created_at <= to_dt,
+                        ),
                     )
                 )
             )
