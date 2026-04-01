@@ -18,16 +18,22 @@ function LoginPage() {
   const from = location.state?.from?.pathname || "/admin";
 
   useEffect(() => {
-    if (!location.state?.sessionExpired) {
+    if (!location.state?.sessionExpired && !location.state?.unauthorized) {
       return;
     }
 
-    setToast({ message: "Session expired. Please login again.", type: "error" });
+    const message = location.state?.unauthorized
+      ? "Not authorized for admin access. Please login with an ICT/Infra account."
+      : "Session expired. Please login again.";
+    setToast({ message, type: "error" });
     const timerId = window.setTimeout(() => {
       setToast({ message: "", type: "success" });
     }, 2500);
 
-    navigate("/login", { replace: true, state: { from: location.state?.from } });
+    navigate("/login", {
+      replace: true,
+      state: { from: location.state?.from }
+    });
     return () => window.clearTimeout(timerId);
   }, [location.state, navigate]);
 

@@ -1,10 +1,23 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { isAuthenticated } from "../utils/auth";
+import { clearAuthToken, getAuthFailureReason, isAuthenticated } from "../utils/auth";
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, requireCoordinatorRole = false }) {
   const location = useLocation();
-  if (!isAuthenticated()) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+  const reason = getAuthFailureReason(requireCoordinatorRole);
+
+  if (!isAuthenticated() || reason === "unauthorized") {
+    clearAuthToken();
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{
+          from: location,
+          sessionExpired: reason === "expired",
+          unauthorized: reason === "unauthorized"
+        }}
+      />
+    );
   }
   return children;
 }

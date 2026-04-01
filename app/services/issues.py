@@ -49,6 +49,17 @@ def _to_utc_aware(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+def _is_within_day_bounds(
+    value: datetime | None,
+    day_start_utc: datetime,
+    day_end_utc: datetime,
+) -> bool:
+    utc_value = _to_utc_aware(value)
+    if utc_value is None:
+        return False
+    return day_start_utc <= utc_value <= day_end_utc
+
+
 def _to_issue(complaint: Complaint) -> Issue:
     return Issue(
         row_index=int(complaint.id),
@@ -89,7 +100,13 @@ def get_all_issues() -> list[Issue]:
         for complaint in complaints
         if (
             complaint.status in OPEN_STATUSES
-            or ((created_at_utc := _to_utc_aware(complaint.created_at)) is not None and day_start_utc <= created_at_utc <= day_end_utc)
+            or (
+                complaint.status == STATUS_RESOLVED
+                and (
+                    _is_within_day_bounds(complaint.resolved_at, day_start_utc, day_end_utc)
+                    or _is_within_day_bounds(complaint.created_at, day_start_utc, day_end_utc)
+                )
+            )
         )
     ]
     return [_to_issue(complaint) for complaint in visible]

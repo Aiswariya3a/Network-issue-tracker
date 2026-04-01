@@ -23,7 +23,7 @@ api.interceptors.response.use(
     console.error("API error:", error?.response || error);
     if ([401, 403].includes(error.response?.status)) {
       clearAuthToken();
-      triggerLogoutRedirect("expired");
+      triggerLogoutRedirect(error.response?.status === 403 ? "unauthorized" : "expired");
     }
     return Promise.reject(error);
   }
