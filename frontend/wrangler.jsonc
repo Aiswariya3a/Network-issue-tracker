@@ -1,5 +1,5 @@
 {
-  "name": "network-issue-tracker-frontend",
+  "name": "network-issue-tracker",
   "compatibility_date": "2026-03-28",
   "assets": {
     "directory": "./dist",
